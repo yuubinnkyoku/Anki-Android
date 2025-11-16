@@ -102,15 +102,19 @@ git tag v"$VERSION"
 
 . tools/check-keystore.sh
 
-# Build signed APK using Gradle and publish to Play.
+# Build signed APK using Gradle and publish to Play, unless SKIP_PLAY is set.
 # Do this before building universal of the play flavor so the universal is not uploaded to Play Store
 # Configuration for pushing to Play specified in build.gradle.kts 'play' task
-echo "Running 'publishPlayReleaseApk' gradle target"
-./gradlew --stop
-if ! ./gradlew publishPlayReleaseApk
-then
-  # APK contains problems, abort release
-  exit 1
+if [ "${SKIP_PLAY:-false}" != "true" ]; then
+  echo "Running 'publishPlayReleaseApk' gradle target"
+  ./gradlew --stop
+  if ! ./gradlew publishPlayReleaseApk
+  then
+    # APK contains problems, abort release
+    exit 1
+  fi
+else
+  echo "SKIP_PLAY set to true - skipping Play Store publish"
 fi
 
 # If the Play Store accepted the builds, the version bump should be pushed / made concrete
@@ -171,8 +175,13 @@ fi
 cp AnkiDroid/build/outputs/apk/full/release/AnkiDroid-full-universal-release.apk "$PREFIX"AnkiDroid-"$VERSION"-full-universal-nominify.apk
 
 # Push to Github Releases.
-GITHUB_TOKEN=$(cat ~/src/my-github-personal-access-token)
-export GITHUB_TOKEN
+if [ -f ~/src/my-github-personal-access-token ]; then
+  GITHUB_TOKEN=$(cat ~/src/my-github-personal-access-token)
+  export GITHUB_TOKEN
+else
+  # If not provided as a file (e.g. we rely on Actions GITHUB_TOKEN), use the env var
+  export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+fi
 export GITHUB_USER="ankidroid"
 export GITHUB_REPO="Anki-Android"
 

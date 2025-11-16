@@ -7,6 +7,10 @@ on:
         description: "any non-empty value triggers a public build - version not auto-incremented / changelog required"
         required: false
         type: string
+      skip_play:
+        description: "set to 'true' to skip Google Play upload even when making a public release"
+        required: false
+        type: string
 
 # We want concurrency control to allow multiple runs, but serially
 # Otherwise if you run two publishes that upload to google at same time
@@ -47,13 +51,13 @@ jobs:
         run: |
           git config --global user.name 'Mike Hardy'
           git config --global user.email 'github@mikehardy.net'
-          git remote set-url origin git@github.com:$GITHUB_REPOSITORY
+          # Use HTTPS remote with token so we don't need SSH key for pushing tags
+          git remote set-url origin https://x-access-token:${{ secrets.RELEASES_PUBLISH_TOKEN }}@github.com/${{ github.repository }}
         shell: bash
 
-      - uses: webfactory/ssh-agent@v0.9.1
-        if: "${{ github.event.inputs.public != '' }}" # publicリリースの場合のみSSHキーを使用
-        with:
-          ssh-private-key: DUMMY_SSH_PRIVATE_KEY # ダミー値
+      # NOTE: We intentionally avoid installing SSH keys for this workflow as
+      # we switch to HTTPS remote and cloning for GitHub operations. This prevents
+      # libcrypto/ssh-add errors with mismatched OpenSSH formats on the runner.
 
       - name: Credential Prep
         if: "${{ github.event.inputs.public != '' }}" # publicリリースの場合のみ認証情報を準備
@@ -73,9 +77,12 @@ jobs:
 
       - name: Build and Release public release
         if: "${{ github.event.inputs.public != '' }}"
+        env:
+          SKIP_PLAY: ${{ github.event.inputs.skip_play }}
         run: |
           pushd ../
-          git clone git@github.com:ankidroid/ankidroiddocs
+          # Use HTTPS clone to avoid SSH key requirement for cloning public docs repo
+          git clone https://github.com/ankidroid/ankidroiddocs.git
           popd
           ./tools/release.sh public
         shell: bash
