@@ -1,0 +1,56 @@
+name: 📦 Build APK
+
+on:
+    workflow_dispatch:
+        inputs:
+            universal:
+                description: "Build universal APK (no ABI splits)"
+                type: boolean
+                required: false
+                default: true
+
+jobs:
+    assemble_full_release:
+        name: Assemble Full Release
+        runs-on: ubuntu-latest
+        env:
+            UNIVERSAL_APK: ${{ inputs.universal && 'true' || 'false' }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Restore Gradle cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.gradle/caches
+                      ~/.gradle/wrapper
+                  key: build-apk-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v5
+              with:
+                  distribution: temurin
+                  java-version: "21"
+
+            - name: Make Gradle executable
+              run: chmod +x ./gradlew
+              shell: bash
+
+            - name: Assemble Full Release APK
+              run: |
+                  ./gradlew --no-daemon :AnkiDroid:clean \
+                    :AnkiDroid:assembleFullRelease \
+                    -Duniversal-apk=${UNIVERSAL_APK} \
+                    -x lintVitalFullRelease \
+                    -x lintVitalAnalyzeFullRelease \
+                    -x lintVitalReportFullRelease \
+                    -x lint
+              shell: bash
+
+            - name: Upload APK artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: AnkiDroid-full-release-apks
+                  path: AnkiDroid/build/outputs/apk/full/release/
+                  if-no-files-found: error
